@@ -1,14 +1,13 @@
-# ใช้ base image ที่มี Python
 FROM python:3.9-slim
 
 # กำหนด working directory ภายใน container
 WORKDIR /app
 
-# คัดลอกไฟล์ requirements.txt และติดตั้ง dependencies
+# คัดลอกไฟล์ requirements.txt
 COPY ./app ./app
 COPY requirements.txt ./
 
-# Install the necessary dependencies including OpenGL and X11 libraries
+# Install the necessary system dependencies
 RUN apt-get update && apt-get install -y \
     libgl1-mesa-glx \
     libx11-dev \
@@ -21,13 +20,22 @@ RUN apt-get update && apt-get install -y \
     libice6 \
     cmake \
     build-essential \
+    ffmpeg \
+    libgtk2.0-dev \
+    libavcodec-dev \
+    libavformat-dev \
+    libswscale-dev \
+    libv4l-dev \
     --no-install-recommends && \
     rm -rf /var/lib/apt/lists/*
 
+# Upgrade pip, setuptools, and wheel
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+
+# Install dependencies from requirements.txt
 RUN pip install --no-cache-dir --upgrade -r requirements.txt
 
-# คัดลอกโค้ดทั้งหมดไปยัง container
-
+# ตั้งค่า PYTHONPATH
 ENV PYTHONPATH=/app
 
 # รันแอปพลิเคชัน FastAPI โดยใช้ Uvicorn

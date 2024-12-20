@@ -13,3 +13,10 @@ def create_face_vector(db: Session, emp_id: int, vector: str):
 # ฟังก์ชันสำหรับดึงข้อมูลพนักงานทั้งหมด
 def get_employees(db: Session, skip: int = 0, limit: int = 10):
     return db.query(Employee).offset(skip).limit(limit).all()
+
+
+# ดึงข้อมูล FaceVector table ทั้งหมด 
+def get_all_face_vectors(db: Session):
+    face_vectors = db.query(FaceVector).all()
+    # ใช้ to_dict แปลงเป็น JSON-compatible format
+    return [face_vector.to_dict() for face_vector in face_vectors]

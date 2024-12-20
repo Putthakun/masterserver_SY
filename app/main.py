@@ -1,9 +1,10 @@
-from fastapi import FastAPI, File, UploadFile, Depends
+from fastapi import FastAPI, File, UploadFile, Depends, APIRouter, HTTPException
 from sqlalchemy.orm import Session
 from io import BytesIO
 import models
 import database
 from database import get_db  # นำเข้าฟังก์ชัน get_db
+from redis_client import redis_client
 import crud
 from crud import *  # นำเข้าฟังก์ชัน get_db
 
@@ -11,9 +12,14 @@ from crud import *  # นำเข้าฟังก์ชัน get_db
 import cv2
 import numpy as np
 import insightface
+import httpx
+import json
+import redis
+from typing import List
 
 
 app = FastAPI()
+router = APIRouter()
 
 model = insightface.app.FaceAnalysis()  # โมเดล InsightFace สำหรับ Face Detection และ Embedding
 model.prepare(ctx_id=1)  # ใช้ CPU (ctx_id=0) หรือ GPU (ctx_id=1)
@@ -26,7 +32,7 @@ def read_root():
     return {"message": "Welcome to FastAPI with MySQL"}
 
 # Endpoint สำหรับการอัปโหลดรูปภาพใบหน้า
-@app.post("/upload_face/{employee_id}")
+@app.post("/api/upload_face/{employee_id}")
 async def upload_face(employee_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
     # อ่านข้อมูลจากไฟล์ที่อัปโหลด
     image_data = await file.read()
@@ -53,3 +59,49 @@ def detect_face_and_get_embedding(image):
         face_embeddings = [face.embedding for face in faces]
         return face_embeddings
     return None
+
+
+# แปลง vector string เป็น numpy array ขณะดึงข้อมูล
+def parse_vector(vector_str):
+    vector = np.fromstring(vector_str.strip('[]'), sep=' ')
+    return vector
+
+# ดึง vector จาก database มาเก็บใน redis
+@app.get("/api/fetch-face-vectors-database")
+def fetch_and_cache_face_vectors(db: Session = Depends(get_db)):
+    # ดึงข้อมูล employee_id และ vector ทั้งหมดจากตาราง FaceVector
+    face_vectors = db.query(FaceVector.emp_id, FaceVector.vector).all()
+    
+    # แปลงข้อมูลเป็น list ของ dict และแปลง vector เป็น numpy array
+    data = []
+    for fv in face_vectors:
+        try:
+            vector_array = np.fromstring(fv.vector.strip("[]"), sep=" ")
+            data.append({"employee_id": fv.emp_id, "vector": vector_array.tolist()})
+        except ValueError:
+            data.append({"employee_id": fv.emp_id, "vector": None})  # จัดการกรณีแปลงไม่สำเร็จ
+
+    try:
+        # เก็บข้อมูลใน Redis
+        redis_client.set("employee_vectors", json.dumps(data))
+        print("Data successfully cached in Redis.")  # พิมพ์ข้อความเมื่อข้อมูลถูกเก็บใน Redis
+    except redis.RedisError as e:
+        print(f"Error saving to Redis: {e}")
+        raise HTTPException(status_code=500, detail="Error saving data to Redis")
+
+    return {"message": "Face vectors retrieved and cached successfully", "data": data}
+
+
+# ดึงข้อมูลจาก redis ส่งไปที่ backened camera
+@app.get("/api/fetch-face-vectors-redis")
+async def fetch_employee_vectors():
+    # ดึงข้อมูล employee_vectors จาก Redis
+    employee_vectors = redis_client.get("employee_vectors")
+    
+    if not employee_vectors:
+        raise HTTPException(status_code=404, detail="No employee vectors found in Redis")
+
+    # แปลงข้อมูลจาก JSON เป็น Python dictionary
+    vectors_data = json.loads(employee_vectors)
+
+    return {"message": "Employee vectors retrieved successfully", "data": vectors_data}

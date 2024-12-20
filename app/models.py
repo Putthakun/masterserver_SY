@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, BigInteger
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from database import Base
+import numpy as np
 
 class Employee(Base):
     __tablename__ = "employees"
@@ -15,12 +16,21 @@ class Employee(Base):
 
 class FaceVector(Base):
     __tablename__ = "face_vectors"
+
     id = Column(Integer, primary_key=True, index=True)
-    emp_id = Column(BigInteger, ForeignKey("employees.id"), unique=True, index=True)  # unique=True เพื่อบังคับให้ emp_id ไม่ซ้ำ
+    emp_id = Column(BigInteger, ForeignKey("employees.id"), unique=True, index=True)
     vector = Column(Text)
 
-    # ความสัมพันธ์กลับไปยัง Employee
     employee = relationship("Employee", back_populates="face_vector")
+
+    def to_dict(self):
+        # แปลง vector string เป็น list
+        vector_array = np.fromstring(self.vector.strip("[]"), sep=" ")
+        return {
+            "id": self.id,
+            "emp_id": self.emp_id,
+            "vector": vector_array.tolist()  # แปลง numpy array เป็น list
+        }
 
 # แปลง numpy array เป็น JSON string
 def convert_vector_to_string(vector):
@@ -31,7 +41,6 @@ class Transaction(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     emp_id = Column(BigInteger, ForeignKey("employees.id"), index=True)  # เปลี่ยนเป็น BigInteger
-    face_vector_id = Column(Integer, ForeignKey("face_vectors.id"), index=True)  # เชื่อมกับ FaceVector
     camera_id = Column(Integer, ForeignKey("cameras.id"), index=True)  # เชื่อมกับ Camera
     timestamp = Column(DateTime, default=datetime.utcnow)  # เวลาของการเข้าร่วม
     

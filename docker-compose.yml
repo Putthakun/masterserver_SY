@@ -2,16 +2,37 @@ version: '3.9'
 
 services:
   fastapi_app:
+    container_name: web_server
     build:
       context: .
       dockerfile: Dockerfile
+    networks:
+      - SY_network
     ports:
       - "8001:8001"
     volumes:
       - ./app:/app
     depends_on:
+      redis:
+        condition: service_healthy
       mysql_db:
         condition: service_healthy
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+
+  redis:
+    image: redis:latest
+    container_name: redis_cache
+    ports:
+      - "6379:6379"
+    networks:
+      - SY_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 10s
+      retries: 5
 
   mysql_db:
     image: mysql:latest
@@ -20,16 +41,17 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: mydatabase
-
     volumes:
       - ./mysql_data:/var/lib/mysql
+    networks: 
+      - SY_network
     ports:
       - "3306:3306"
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
       interval: 10s
-      timeout: 5s
-      retries: 5
+      timeout: 20s
+      retries: 10
 
   phpmyadmin:
     image: phpmyadmin/phpmyadmin:latest
@@ -39,7 +61,14 @@ services:
       PMA_HOST: mysql_db   # ชื่อ container ของ MySQL
       MYSQL_ROOT_PASSWORD: root
       APACHE_SERVER_NAME: localhost # กำหนด ServerName เป็น localhost
+    networks:
+      - SY_network
     ports:
       - "8080:80"
     depends_on:
       - mysql_db
+
+networks:
+  SY_network:
+    external: true  # เชื่อมต่อกับ network ภายนอก
+
