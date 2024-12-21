@@ -37,8 +37,6 @@ async def upload_face(employee_id: int, file: UploadFile = File(...), db: Sessio
     image = np.array(bytearray(image_data), dtype=np.uint8)
     img = cv2.imdecode(image, cv2.IMREAD_COLOR)
     
-    # ตรวจจับใบหน้าด้วย InsightFace หรือ Dlib
-    # (ใช้ InsightFace หรือโมเดลที่คุณใช้ในการตรวจจับใบหน้า)
     face_embeddings = detect_face_and_get_embedding(img)
     
     if face_embeddings is not None:
@@ -64,10 +62,15 @@ def parse_vector(vector_str):
     return vector
 
 # ดึง vector จาก database มาเก็บใน redis
-@app.get("/api/fetch-face-vectors-database")
-def fetch_and_cache_face_vectors(db: Session = Depends(get_db)):
+@app.on_event("startup")
+async def on_startup():
+    db = next(get_db())  # เรียกใช้ get_db เพื่อเชื่อมต่อกับฐานข้อมูล
+    await fetch_and_cache_face_vectors(db)
+
+# ฟังก์ชันดึงเวกเตอร์จากฐานข้อมูลและเก็บใน Redis
+async def fetch_and_cache_face_vectors(db: Session):
     # ดึงข้อมูล employee_id และ vector ทั้งหมดจากตาราง FaceVector
-    face_vectors = db.query(FaceVector.emp_id, FaceVector.vector).all()
+    face_vectors = db.query(models.FaceVector.emp_id, models.FaceVector.vector).all()
     
     # แปลงข้อมูลเป็น list ของ dict และแปลง vector เป็น numpy array
     data = []
@@ -86,22 +89,6 @@ def fetch_and_cache_face_vectors(db: Session = Depends(get_db)):
         print(f"Error saving to Redis: {e}")
         raise HTTPException(status_code=500, detail="Error saving data to Redis")
 
-    return {"message": "Face vectors retrieved and cached successfully", "data": data}
-
-
-# ดึงข้อมูลจาก redis ส่งไปที่ backened camera
-@app.get("/api/fetch-face-vectors-redis")
-async def fetch_employee_vectors():
-    # ดึงข้อมูล employee_vectors จาก Redis
-    employee_vectors = redis_client.get("employee_vectors")
-    
-    if not employee_vectors:
-        raise HTTPException(status_code=404, detail="No employee vectors found in Redis")
-
-    # แปลงข้อมูลจาก JSON เป็น Python dictionary
-    vectors_data = json.loads(employee_vectors)
-
-    return {"message": "Employee vectors retrieved successfully", "data": vectors_data}
 
 # POST endpoint to receive the transaction
 @app.post("/api/record-transaction")
