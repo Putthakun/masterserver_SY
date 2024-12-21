@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from models import *
-
+from schemas import *
 
 # ฟังก์ชันสำหรับสร้าง FaceVector
 def create_face_vector(db: Session, emp_id: int, vector: str):
@@ -20,3 +20,14 @@ def get_all_face_vectors(db: Session):
     face_vectors = db.query(FaceVector).all()
     # ใช้ to_dict แปลงเป็น JSON-compatible format
     return [face_vector.to_dict() for face_vector in face_vectors]
+
+def create_transaction(db: Session, transaction: TransactionRequest):
+    db_transaction = Transaction(
+        emp_id=transaction.emp_id,
+        camera_id=transaction.camera_id,
+        timestamp=transaction.timestamp
+    )
+    db.add(db_transaction)
+    db.commit()
+    db.refresh(db_transaction)
+    return db_transaction

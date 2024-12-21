@@ -7,6 +7,7 @@ from database import get_db  # นำเข้าฟังก์ชัน get_db
 from redis_client import redis_client
 import crud
 from crud import *  # นำเข้าฟังก์ชัน get_db
+from typing import List
 
 #library for images processing
 import cv2
@@ -15,7 +16,8 @@ import insightface
 import httpx
 import json
 import redis
-from typing import List
+import schemas
+
 
 
 app = FastAPI()
@@ -26,10 +28,6 @@ model.prepare(ctx_id=1)  # ใช้ CPU (ctx_id=0) หรือ GPU (ctx_id=1)
 
 # สร้างฐานข้อมูลตอนเริ่มต้น (ครั้งแรก)
 models.Base.metadata.create_all(bind=database.engine)
-
-@app.get("/")
-def read_root():
-    return {"message": "Welcome to FastAPI with MySQL"}
 
 # Endpoint สำหรับการอัปโหลดรูปภาพใบหน้า
 @app.post("/api/upload_face/{employee_id}")
@@ -59,7 +57,6 @@ def detect_face_and_get_embedding(image):
         face_embeddings = [face.embedding for face in faces]
         return face_embeddings
     return None
-
 
 # แปลง vector string เป็น numpy array ขณะดึงข้อมูล
 def parse_vector(vector_str):
@@ -105,3 +102,12 @@ async def fetch_employee_vectors():
     vectors_data = json.loads(employee_vectors)
 
     return {"message": "Employee vectors retrieved successfully", "data": vectors_data}
+
+# POST endpoint to receive the transaction
+@app.post("/api/record-transaction")
+async def record_transaction(transaction: schemas.TransactionRequest, db: Session = Depends(get_db)):
+    try:
+        db_transaction = crud.create_transaction(db=db, transaction=transaction)
+        return {"status": "Transaction recorded successfully", "transaction_id": db_transaction.id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error recording transaction: {str(e)}")
