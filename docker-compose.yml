@@ -15,11 +15,12 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-      mysql_db:
+      sql_server:
         condition: service_healthy
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - DATABASE_URL=mssql+pyodbc://SA:StrongP@ssw0rd!@sql_server/mydatabase?driver=ODBC+Driver+18+for+SQL+Server
 
   redis:
     image: redis:latest
@@ -34,41 +35,36 @@ services:
       timeout: 10s
       retries: 5
 
-  mysql_db:
-    image: mysql:latest
-    container_name: mysql_db
+  sql_server:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: sql_server
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: mydatabase
-    volumes:
-      - ./mysql_data:/var/lib/mysql
-    networks: 
-      - SY_network
+      ACCEPT_EULA: "Y"
+      SA_PASSWORD: "StrongP@ssw0rd!"
     ports:
-      - "3306:3306"
+      - "1433:1433"
+    volumes:
+      - ./sqlserver_data:/var/opt/mssql
+    networks:
+      - SY_network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
-      interval: 10s
+      test: ["CMD-SHELL", "/opt/mssql-tools/bin/sqlcmd -S localhost -U SA -P StrongP@ssw0rd! -Q 'SELECT 1'"]
+      interval: 30s
       timeout: 20s
       retries: 10
 
-  phpmyadmin:
-    image: phpmyadmin/phpmyadmin:latest
+  adminer:
+    image: adminer:latest
+    container_name: adminer
     restart: always
-    container_name: phpmyadmin
     environment:
-      PMA_HOST: mysql_db   # ชื่อ container ของ MySQL
-      MYSQL_ROOT_PASSWORD: root
-      APACHE_SERVER_NAME: localhost # กำหนด ServerName เป็น localhost
+      ADMINER_DEFAULT_SERVER: sql_server
     networks:
       - SY_network
     ports:
-      - "8080:80"
-    depends_on:
-      - mysql_db
+      - "8080:8080"
 
 networks:
   SY_network:
-    external: true  # เชื่อมต่อกับ network ภายนอก
-
+    external: true
